@@ -1,1052 +1,633 @@
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Derek Cyr | Homelab</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            "bg-deep":    "#f0f4f8",
-            "bg-card":    "#f8fafc",
-            "bg-surface": "#e8eef5",
-            "text-deep":  "#1a2640",
-            "text-mid":   "#2d3f5e",
-            "text-light": "#526380",
-            primary:   "#1e40af",
-            secondary: "#1e3a8a",
-            accent:    "#3b82f6",
-            gold:      "#b45309",
-          },
-          fontFamily: {
-            sans: ["Sora", "sans-serif"],
-            mono: ["JetBrains Mono", "monospace"],
-          },
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Derek Cyr | Homelab</title>
+<meta name="description" content="A walkthrough of a production-grade self-hosted private cloud: Proxmox, TrueNAS, OPNsense, VLAN segmentation, and 10+ self-hosted services." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper: "#FAFAF7", surface: "#FFFFFF", "surface-2": "#F1F1EA",
+          ink: "#14181F", "ink-soft": "#5B6472", line: "#E3E3DC",
+          signal: "#0F6E5C", "signal-soft": "#E6F2EF",
+          amber: "#B5730A", "amber-soft": "#FBF1E2",
+          console: "#12171A", "console-2": "#191F23", "console-line": "#2A3236",
+          phosphor: "#4ADE80",
+        },
+        fontFamily: {
+          display: ["Fraunces", "serif"],
+          sans: ["Inter", "sans-serif"],
+          mono: ["JetBrains Mono", "monospace"],
         },
       },
-    };
-  </script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body { background-color: #f0f4f8; color: #1a2640; overflow-x: hidden; font-family: "Sora", sans-serif; }
+    },
+  };
+</script>
+<style>
+  body { background-color:#FAFAF7; color:#14181F; }
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:#F1F1EA; }
+  ::-webkit-scrollbar-thumb { background:#0F6E5C; border-radius:3px; }
+  .eyebrow { font-family:"JetBrains Mono",monospace; letter-spacing:.06em; }
+  .mono { font-family:"JetBrains Mono",monospace; }
 
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: #e8eef5; }
-    ::-webkit-scrollbar-thumb { background: #1e40af; border-radius: 3px; }
+  #topbar { border-bottom:1px solid transparent; transition: border-color .3s, background-color .3s; }
+  #topbar.scrolled { background: rgba(250,250,247,0.92); backdrop-filter: blur(10px); border-bottom-color: #E3E3DC; }
+  .wordmark { font-family:"Fraunces","serif"; font-weight:500; letter-spacing:-0.01em; }
+  .nav-link { color:#5B6472; transition:color .2s; }
+  .nav-link:hover { color:#14181F; }
+  #mobile-menu { max-height:0; overflow:hidden; transition:max-height .4s ease; }
+  #mobile-menu.open { max-height:400px; }
 
-    #grid-bg {
-      background-size: 60px 60px;
-      background-image:
-        linear-gradient(to right,  rgba(30,64,175,0.045) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(30,64,175,0.045) 1px, transparent 1px);
-    }
+  .reveal { opacity:0; transform: translateY(14px); transition: opacity .6s cubic-bezier(.2,.7,.2,1), transform .6s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity:1; transform:none; }
+  .d1{transition-delay:.05s}.d2{transition-delay:.1s}.d3{transition-delay:.15s}
 
-    @keyframes blob {
-      0%   { transform: translate(0,0) scale(1); }
-      33%  { transform: translate(28px,-44px) scale(1.08); }
-      66%  { transform: translate(-18px,18px) scale(0.92); }
-      100% { transform: translate(0,0) scale(1); }
-    }
-    .blob { animation: blob 11s infinite ease-in-out; }
+  .status-dot { position: relative; display:inline-flex; width:6px; height:6px; }
+  .status-dot .core { position:absolute; inset:0; border-radius:9999px; background:#4ADE80; }
+  .status-dot .ping { position:absolute; inset:0; border-radius:9999px; background:#4ADE80; opacity:.5; animation: pingslow 2.2s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes pingslow { 0%{transform:scale(1);opacity:.55} 75%,100%{transform:scale(2.6);opacity:0} }
 
-    .glass {
-      background: rgba(255,255,255,0.9);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(30,64,175,0.10);
-      box-shadow: 0 2px 20px rgba(30,64,175,0.06);
-    }
-    .glass-nav {
-      background: rgba(248,250,252,0.97);
-      backdrop-filter: blur(22px);
-      border: 1px solid rgba(30,64,175,0.12);
-      box-shadow: 0 2px 24px rgba(30,64,175,0.08);
-    }
+  .facts { font-family:"JetBrains Mono",monospace; font-size:.78rem; color:#5B6472; }
+  .facts span.sep { color:#D8D8CF; margin:0 .55em; }
+  .facts b { color:#14181F; font-weight:500; }
 
-    .tg {
-      background: linear-gradient(130deg, #1e40af 0%, #3b82f6 55%, #60a5fa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
+  .path-eyebrow { font-family:"JetBrains Mono",monospace; font-size:.72rem; letter-spacing:.02em; }
 
-    @keyframes fadeUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
-    .fi { animation: fadeUp 0.85s ease-out forwards; opacity:0; }
-    .fi-1 { animation-delay:0.05s; }
-    .fi-2 { animation-delay:0.15s; }
-    .fi-3 { animation-delay:0.25s; }
-    .fi-4 { animation-delay:0.38s; }
-    .fi-5 { animation-delay:0.52s; }
+  /* Console (dark) panel */
+  .console-panel { background: radial-gradient(140% 140% at 20% 0%, #1B2226 0%, #12171A 60%); border:1px solid #2A3236; box-shadow: 0 30px 60px -25px rgba(0,0,0,0.45); }
+  .console-chrome { background:#191F23; border-bottom:1px solid #2A3236; }
+  .console-dot { width:9px; height:9px; border-radius:9999px; }
 
-    .rv { opacity:0; transform:translateY(28px); transition: opacity 0.8s cubic-bezier(.2,.8,.2,1), transform 0.8s cubic-bezier(.2,.8,.2,1); }
-    .rv.lft { transform:translateX(-36px); }
-    .rv.rgt { transform:translateX(36px); }
-    .rv.on  { opacity:1; transform:translate(0,0); }
-    .d1 { transition-delay:0.08s; }
-    .d2 { transition-delay:0.16s; }
-    .d3 { transition-delay:0.24s; }
-    .d4 { transition-delay:0.32s; }
+  /* Topology diagram */
+  .topo-node { cursor:pointer; }
+  .topo-node:hover .topo-box { stroke:#4ADE80; }
+  .topo-node:hover .topo-label { fill:#4ADE80; }
+  .topo-box { fill:#191F23; stroke:#3A4448; stroke-width:1; transition: stroke .2s; }
+  .topo-label { fill:#C8D2CD; font-family:"JetBrains Mono",monospace; transition: fill .2s; }
+  .topo-sublabel { fill:#6B7580; font-family:"JetBrains Mono",monospace; }
+  .topo-line { stroke:#2A3236; stroke-width:1.5; fill:none; }
+  .topo-flow { stroke:#4ADE80; stroke-width:1.5; fill:none; stroke-dasharray:4 5; animation: flow 1.6s linear infinite; opacity:0.6; }
+  @keyframes flow { to { stroke-dashoffset:-18; } }
 
-    .section-wrap { position:relative; z-index:10; }
+  /* Placard = a single exhibit item in the story flow */
+  .placard { border-top: 1px solid #E3E3DC; }
+  .placard-lead { border-top: none; }
 
-    .tbadge {
-      font-family:"JetBrains Mono",monospace;
-      font-size:0.65rem; font-weight:600;
-      letter-spacing:0.14em; text-transform:uppercase;
-      color:#1e40af;
-      background:rgba(30,64,175,0.07);
-      border:1px solid rgba(30,64,175,0.18);
-      border-radius:999px;
-      padding:0.28rem 0.9rem;
-      display:inline-block;
-    }
+  .term-line { font-family:"JetBrains Mono",monospace; }
+  .cursor-blink { display:inline-block; width:7px; height:14px; background:#4ADE80; animation: blink 1s step-start infinite; vertical-align:-2px; }
+  @keyframes blink { 50% { opacity:0; } }
 
-    .spill {
-      font-family:"JetBrains Mono",monospace;
-      font-size:0.63rem; color:#526380;
-      background:#e8eef5;
-      border:1px solid rgba(30,64,175,0.10);
-      border-radius:6px;
-      padding:0.13rem 0.5rem;
-      display:inline-block;
-      margin:0.1rem 0.06rem 0 0;
-    }
+  .roadmap-item { border-left: 2px solid #E3E3DC; }
 
-    .big-stat { transition: transform 0.2s; }
-    .big-stat:hover { transform: translateY(-3px); }
+  .stat-num { font-family:"JetBrains Mono",monospace; font-weight:600; }
 
-    .sec-div {
-      height:1px;
-      background:linear-gradient(90deg, transparent 0%, rgba(30,64,175,0.12) 20%, rgba(30,64,175,0.12) 80%, transparent 100%);
-    }
+  /* Service status light widget */
+  .svc-dot { width:8px; height:8px; border-radius:9999px; background:#4ADE80; box-shadow:0 0 6px rgba(74,222,128,0.7); flex-shrink:0; }
+  .svc-dot.amber { background:#F3C685; box-shadow:0 0 6px rgba(243,198,133,0.7); }
 
-    .expand-btn {
-      display:inline-flex; align-items:center; gap:0.4rem;
-      font-size:0.75rem; font-weight:600; font-family:"JetBrains Mono",monospace;
-      color:#1e40af; cursor:pointer;
-      background:rgba(30,64,175,0.06);
-      border:1px solid rgba(30,64,175,0.16);
-      border-radius:999px;
-      padding:0.32rem 0.85rem;
-      transition: background 0.2s;
-      user-select:none;
-    }
-    .expand-btn:hover { background:rgba(30,64,175,0.12); }
-    .expand-btn .arr { transition:transform 0.3s; display:inline-block; }
-    .expand-btn.open .arr { transform:rotate(180deg); }
+  /* VLAN status pill widget */
+  .vlan-pill { transition: transform .2s; }
+  .vlan-pill:hover { transform: translateY(-2px); }
+  .vlan-pulse { position: relative; display:inline-flex; width:7px; height:7px; flex-shrink:0; }
+  .vlan-pulse .core { position:absolute; inset:0; border-radius:9999px; }
+  .vlan-pulse .ping { position:absolute; inset:0; border-radius:9999px; opacity:.5; animation: pingslow 2s cubic-bezier(0,0,.2,1) infinite; }
 
-    .expandable { overflow:hidden; max-height:0; transition:max-height 0.45s cubic-bezier(.4,0,.2,1), opacity 0.35s; opacity:0; }
-    .expandable.open { max-height:1200px; opacity:1; }
+  /* Backup health bars */
+  .health-bar-track { background:#E3E3DC; border-radius:9999px; overflow:hidden; height:6px; }
+  .health-bar-fill { height:100%; border-radius:9999px; background:#0F6E5C; width:0%; transition: width 1.1s cubic-bezier(.2,.7,.2,1); }
+  .health-bar-fill.filled { width:100%; }
 
-    .v10 { border-left:4px solid #1e40af; }
-    .v20 { border-left:4px solid #b45309; }
-    .v30 { border-left:4px solid #059669; }
-    .v40 { border-left:4px solid #7c3aed; }
-
-    .term {
-      background:#111827; border-radius:0.9rem; overflow:hidden;
-      font-family:"JetBrains Mono",monospace;
-      border:1px solid rgba(30,64,175,0.18);
-      box-shadow:0 10px 40px rgba(17,24,39,0.22);
-    }
-    .term-hdr {
-      display:flex; align-items:center; gap:0.4rem;
-      padding:0.65rem 1rem;
-      background:#1a2535;
-      border-bottom:1px solid rgba(255,255,255,0.05);
-    }
-    .td { width:0.52rem; height:0.52rem; border-radius:50%; }
-    .term-body { padding:1.25rem; font-size:0.75rem; line-height:1.9; color:#b8ccec; white-space:pre-wrap; }
-    .tc { color:#3a5070; } .tp { color:#4ade80; } .tk { color:#67e8f9; }
-    .tv { color:#a78bfa; } .th { color:#818cf8; } .tw { color:#fbbf24; font-weight:600; }
-    .tm { color:#374151; }
-
-    nav a { color:#526380; }
-    nav a:hover { color:#1a2640; }
-
-    .nxt {
-      display:inline-flex; align-items:center; gap:0.45rem;
-      font-size:0.82rem; font-weight:700; color:#1e40af;
-      transition:color 0.2s;
-    }
-    .nxt svg { transition:transform 0.2s; }
-    .nxt:hover { color:#1e3a8a; }
-    .nxt:hover svg { transform:translateX(5px); }
-
-    .topo-node {
-      border-radius:0.75rem; padding:0.65rem 1rem;
-      font-family:"JetBrains Mono",monospace; font-size:0.72rem; font-weight:500;
-      text-align:center; border:1px solid rgba(30,64,175,0.14);
-      background:rgba(255,255,255,0.8);
-      color:#1a2640;
-    }
-    .topo-inet { background:rgba(239,68,68,0.06); border-color:rgba(239,68,68,0.28); color:#b91c1c; }
-    .topo-fw   { background:rgba(245,158,11,0.07); border-color:rgba(245,158,11,0.3); color:#92400e; }
-    .topo-sw   { background:rgba(30,64,175,0.07); border-color:rgba(30,64,175,0.25); color:#1e3a8a; }
-    .topo-v    { background:rgba(59,130,246,0.07); border-color:rgba(59,130,246,0.22); }
-
-    #mob-menu { max-height:0; overflow:hidden; transition:max-height 0.4s ease; display:none; }
-    #mob-menu.open { max-height:500px; display:flex; flex-direction:column; }
-
-    .stag { transition:transform 0.18s, box-shadow 0.18s; }
-    .stag:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(30,64,175,0.13); }
-
-    .why {
-      background:rgba(30,64,175,0.04);
-      border:1px solid rgba(30,64,175,0.13);
-      border-radius:0.75rem;
-      padding:1rem 1.25rem;
-    }
-    .why-gold {
-      background:rgba(180,83,9,0.04);
-      border:1px solid rgba(180,83,9,0.16);
-      border-radius:0.75rem;
-      padding:1rem 1.25rem;
-    }
-  </style>
+  /* Request-path hop widget */
+  .hop { display:inline-flex; flex-direction:column; align-items:flex-start; gap:2px; background:#191F23; border:1px solid #2A3236; border-radius:.5rem; padding:.5rem .75rem; font-family:"JetBrains Mono",monospace; font-size:.78rem; color:#C8D2CD; }
+  .hop-sub { font-size:.62rem; color:#6B7580; }
+  .hop-arrow { color:#4ADE80; font-family:"JetBrains Mono",monospace; }
+</style>
 </head>
-<body class="relative">
+<body class="font-sans antialiased">
 
-<!-- Background -->
-<div class="fixed inset-0 z-0 pointer-events-none">
-  <div id="grid-bg" class="absolute inset-0"></div>
-  <div class="absolute top-0 -left-4 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 blob"></div>
-  <div class="absolute top-0 -right-4 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-25 blob" style="animation-delay:2.5s"></div>
-  <div class="absolute bottom-20 left-20 w-72 h-72 bg-sky-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 blob" style="animation-delay:4.5s"></div>
-</div>
-
-<!-- Nav -->
-<nav class="fixed top-5 left-1/2 -translate-x-1/2 w-[92%] max-w-4xl z-50 glass-nav rounded-full px-6 py-3">
-  <div class="flex justify-between items-center">
-    <a href="index.html" class="text-xl font-bold font-mono tracking-tight text-text-deep hover:text-primary transition">Derek<span class="tg">Cyr</span></a>
-    <ul class="hidden md:flex gap-1 text-sm font-medium">
-      <li><a href="index.html#home"       class="px-4 py-2 rounded-full hover:bg-bg-surface transition-colors">Home</a></li>
-      <li><a href="index.html#about"      class="px-4 py-2 rounded-full hover:bg-bg-surface transition-colors">About</a></li>
-      <li><a href="index.html#experience" class="px-4 py-2 rounded-full hover:bg-bg-surface transition-colors">Experience</a></li>
-      <li><a href="homelab.html"          class="px-4 py-2 rounded-full text-primary font-semibold">Homelab</a></li>
-      <li><a href="resume.html"           class="ml-2 px-5 py-2 rounded-full bg-primary text-white hover:bg-secondary font-bold shadow-md transition-all">Resume</a></li>
-    </ul>
-    <button id="mob-btn" class="md:hidden text-text-deep">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path id="ico-o" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-        <path id="ico-c" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-      </svg>
+<!-- ═══ NAV ═══ -->
+<header id="topbar" class="fixed top-0 left-0 w-full z-50">
+  <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+    <a href="index.html" class="wordmark text-lg text-ink">Derek <span class="text-signal">Cyr</span></a>
+    <nav class="hidden md:flex items-center gap-7 text-sm">
+      <a href="index.html#about" class="nav-link">About</a>
+      <a href="index.html#experience" class="nav-link">Experience</a>
+      <a href="homelab.html" class="text-signal font-medium">Homelab</a>
+      <a href="resume.html" class="bg-ink text-paper text-sm font-medium px-4 py-2 rounded hover:bg-signal transition">Resume</a>
+    </nav>
+    <button id="mobile-menu-btn" class="md:hidden text-ink" aria-label="Toggle menu">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path id="icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 6h16M4 12h16M4 18h16"/><path id="icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </div>
-  <div id="mob-menu" class="absolute top-full left-0 w-full mt-3 glass rounded-2xl">
-    <a href="index.html#home"       class="mob-l block px-6 py-4 border-b border-text-light/10 hover:bg-bg-surface text-text-deep">Home</a>
-    <a href="index.html#about"      class="mob-l block px-6 py-4 border-b border-text-light/10 hover:bg-bg-surface text-text-deep">About</a>
-    <a href="index.html#experience" class="mob-l block px-6 py-4 border-b border-text-light/10 hover:bg-bg-surface text-text-deep">Experience</a>
-    <a href="homelab.html"          class="mob-l block px-6 py-4 border-b border-text-light/10 text-primary font-semibold">Homelab</a>
-    <a href="resume.html"           class="mob-l block px-6 py-4 text-primary font-bold">Resume</a>
+  <div id="mobile-menu" class="md:hidden bg-paper border-b border-line px-6">
+    <a href="index.html#about" class="mobile-link block py-3 text-sm text-ink-soft border-t border-line">About</a>
+    <a href="index.html#experience" class="mobile-link block py-3 text-sm text-ink-soft border-t border-line">Experience</a>
+    <a href="resume.html" class="mobile-link block py-4 text-sm font-semibold text-signal border-t border-line">Resume →</a>
   </div>
-</nav>
+</header>
 
-
-<!-- ══════════════════════════════════════ HERO ══════════════════════════════════════ -->
-<section class="section-wrap min-h-screen flex flex-col justify-center items-center px-4 pt-24 pb-20" style="background:linear-gradient(160deg,#e8eef5 0%,#dde6f0 55%,#d0dcea 100%)">
-  <div class="text-center max-w-4xl space-y-6">
-
-    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/25 text-primary text-sm font-mono fi fi-1" style="background:rgba(30,64,175,0.07)">
-      <span class="relative flex h-2 w-2">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60"></span>
-        <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-      </span>
-      Self-Hosted · Always-On Private Cloud
+<!-- ═══ HERO ═══ -->
+<section class="pt-32 md:pt-36 pb-14 px-6">
+  <div class="max-w-3xl mx-auto">
+    <div class="reveal in flex items-center gap-2 eyebrow text-xs text-signal mb-5">
+      <span class="status-dot"><span class="ping"></span><span class="core"></span></span>
+      SELF-HOSTED · ALWAYS-ON · ZERO-TRUST
     </div>
-
-    <h1 class="text-6xl md:text-8xl font-extrabold tracking-tight leading-[1.05] text-text-deep fi fi-2">
-      The <span class="tg">Homelab</span>
+    <h1 class="reveal in d1 font-display text-4xl md:text-5xl font-medium tracking-tight text-ink leading-[1.1] mb-5">
+      The Homelab
     </h1>
+    <p class="reveal in d2 text-base text-ink-soft leading-relaxed max-w-xl mb-5">
+      Everything on this page is real hardware sitting in my house, not a diagram I drew for a portfolio. Scroll through it like a tour, room by room, or click a stop on the map below to jump straight there.
+    </p>
+  </div>
+</section>
 
-    <p class="text-lg md:text-xl text-text-light max-w-2xl mx-auto leading-relaxed fi fi-3">
-      A production-grade private cloud built from the ground up — real hardware, real network segmentation, real security enforcement.
+<!-- ═══ STAT STRIP WIDGET ═══ -->
+<section class="px-6 pb-14">
+  <div class="max-w-3xl mx-auto reveal in d3">
+    <div class="console-panel rounded-xl overflow-hidden">
+      <div class="console-chrome flex items-center gap-2 px-4 py-2.5">
+        <span class="console-dot bg-[#ff5f56]"></span>
+        <span class="console-dot bg-[#ffbd2e]"></span>
+        <span class="console-dot bg-[#27c93f]"></span>
+        <span class="mono text-xs text-[#6B7580] ml-3">status — live specs</span>
+      </div>
+      <div class="grid grid-cols-3 md:grid-cols-6 divide-x divide-y md:divide-y-0 divide-console-line">
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor"><span class="counter" data-target="128">0</span></p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">GB ECC RAM</p>
+        </div>
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor"><span class="counter" data-target="4">0</span>+</p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">TB ZFS</p>
+        </div>
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor"><span class="counter" data-target="4">0</span></p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">VLANs</p>
+        </div>
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor"><span class="counter" data-target="10">0</span>+</p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">VMs / LXCs</p>
+        </div>
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor">Zero</p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">Trust Model</p>
+        </div>
+        <div class="p-3 sm:p-4 text-center">
+          <p class="stat-num text-xl sm:text-2xl text-phosphor">24/7</p>
+          <p class="mono text-[.6rem] text-[#6B7580] mt-1 uppercase">Uptime Target</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ THE MAP (interactive topology) ═══ -->
+<section class="px-6 pb-20">
+  <div class="max-w-3xl mx-auto reveal in">
+    <div class="console-panel rounded-2xl overflow-hidden">
+      <div class="console-chrome flex items-center gap-2 px-4 py-3">
+        <span class="console-dot bg-[#ff5f56]"></span>
+        <span class="console-dot bg-[#ffbd2e]"></span>
+        <span class="console-dot bg-[#27c93f]"></span>
+        <span class="mono text-xs text-[#6B7580] ml-3">the map — click a stop to jump there</span>
+      </div>
+      <!-- Mobile: simple tappable stop list -->
+      <div class="md:hidden divide-y divide-console-line">
+        <button class="topo-node-m w-full flex items-center gap-3 px-4 py-3.5 text-left" data-target="room-1">
+          <span class="text-lg">🖥</span>
+          <span class="flex-1">
+            <span class="block mono text-sm text-[#C8D2CD]">Proxmox &amp; Storage</span>
+            <span class="block mono text-[.65rem] text-[#6B7580]">Room 1 · The Foundation</span>
+          </span>
+          <span class="text-phosphor text-sm">→</span>
+        </button>
+        <button class="topo-node-m w-full flex items-center gap-3 px-4 py-3.5 text-left" data-target="room-2">
+          <span class="text-lg">🔥</span>
+          <span class="flex-1">
+            <span class="block mono text-sm text-[#C8D2CD]">Firewall &amp; VLANs</span>
+            <span class="block mono text-[.65rem] text-[#6B7580]">Room 2 · Follow a Packet Home</span>
+          </span>
+          <span class="text-phosphor text-sm">→</span>
+        </button>
+        <button class="topo-node-m w-full flex items-center gap-3 px-4 py-3.5 text-left" data-target="room-3">
+          <span class="text-lg">🐳</span>
+          <span class="flex-1">
+            <span class="block mono text-sm text-[#C8D2CD]">Practice Lab &amp; Services</span>
+            <span class="block mono text-[.65rem] text-[#6B7580]">Room 3 · The Everyday</span>
+          </span>
+          <span class="text-phosphor text-sm">→</span>
+        </button>
+        <button class="topo-node-m w-full flex items-center gap-3 px-4 py-3.5 text-left" data-target="room-4">
+          <span class="text-lg">💾</span>
+          <span class="flex-1">
+            <span class="block mono text-sm text-[#C8D2CD]">Backups &amp; Roadmap</span>
+            <span class="block mono text-[.65rem] text-[#6B7580]">Room 4 · Resilience</span>
+          </span>
+          <span class="text-phosphor text-sm">→</span>
+        </button>
+      </div>
+
+      <!-- Desktop: full interactive topology -->
+      <div class="hidden md:block p-4 md:p-8 overflow-x-auto">
+        <svg viewBox="0 0 760 480" class="w-full min-w-[620px]" xmlns="http://www.w3.org/2000/svg">
+          <path class="topo-line" d="M380 40 V80" /><path class="topo-flow" d="M380 40 V80" />
+          <path class="topo-line" d="M380 120 V160" /><path class="topo-flow" d="M380 120 V160" />
+          <path class="topo-line" d="M380 200 V230" /><path class="topo-flow" d="M380 200 V230" />
+          <path class="topo-line" d="M155 230 V260 H605 V230" />
+          <path class="topo-line" d="M155 260 V300" /><path class="topo-line" d="M305 260 V300" />
+          <path class="topo-line" d="M455 260 V300" /><path class="topo-line" d="M605 260 V300" />
+          <path class="topo-line" d="M380 340 V370" /><path class="topo-flow" d="M380 340 V370" />
+
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="300" y="8" width="160" height="32" rx="6"/><text class="topo-label" x="380" y="28" font-size="12" text-anchor="middle">🌐 Public Internet</text></g>
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="280" y="80" width="200" height="40" rx="6"/><text class="topo-label" x="380" y="100" font-size="12" text-anchor="middle">🔥 OPNsense Firewall</text><text class="topo-sublabel" x="380" y="114" font-size="9" text-anchor="middle">stateful inspection · NAT</text></g>
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="270" y="160" width="220" height="40" rx="6"/><text class="topo-label" x="380" y="180" font-size="12" text-anchor="middle">🔀 Managed Switch</text><text class="topo-sublabel" x="380" y="194" font-size="9" text-anchor="middle">802.1Q VLAN tagging</text></g>
+
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="80" y="230" width="150" height="30" rx="6"/><text class="topo-label" x="155" y="250" font-size="11" text-anchor="middle">VLAN 10 · Admin</text></g>
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="230" y="230" width="150" height="30" rx="6"/><text class="topo-label" x="305" y="250" font-size="11" text-anchor="middle">VLAN 20 · Clients</text></g>
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="380" y="230" width="150" height="30" rx="6"/><text class="topo-label" x="455" y="250" font-size="11" text-anchor="middle">VLAN 30 · IoT</text></g>
+          <g class="topo-node" data-target="room-2"><rect class="topo-box" x="530" y="230" width="150" height="30" rx="6"/><text class="topo-label" x="605" y="250" font-size="11" text-anchor="middle">VLAN 40 · VPN</text></g>
+
+          <g class="topo-node" data-target="room-1"><rect class="topo-box" x="80" y="300" width="150" height="40" rx="6"/><text class="topo-label" x="155" y="320" font-size="12" text-anchor="middle">🖥 Proxmox VE</text><text class="topo-sublabel" x="155" y="334" font-size="9" text-anchor="middle">hypervisor host</text></g>
+          <g class="topo-node" data-target="room-1"><rect class="topo-box" x="230" y="300" width="150" height="40" rx="6"/><text class="topo-label" x="305" y="320" font-size="12" text-anchor="middle">💾 TrueNAS</text><text class="topo-sublabel" x="305" y="334" font-size="9" text-anchor="middle">ZFS storage</text></g>
+          <g class="topo-node" data-target="room-3"><rect class="topo-box" x="380" y="300" width="150" height="40" rx="6"/><text class="topo-label" x="455" y="320" font-size="12" text-anchor="middle">🐳 Docker LXC</text><text class="topo-sublabel" x="455" y="334" font-size="9" text-anchor="middle">self-hosted apps</text></g>
+          <g class="topo-node" data-target="room-1"><rect class="topo-box" x="530" y="300" width="150" height="40" rx="6"/><text class="topo-label" x="605" y="320" font-size="12" text-anchor="middle">🎮 Client Nodes</text><text class="topo-sublabel" x="605" y="334" font-size="9" text-anchor="middle">VLAN 20 endpoints</text></g>
+
+          <g class="topo-node" data-target="room-4"><rect class="topo-box" x="220" y="370" width="320" height="40" rx="6"/><text class="topo-label" x="380" y="390" font-size="12" text-anchor="middle">💾 Backups &amp; What Happens When Something Breaks</text><text class="topo-sublabel" x="380" y="404" font-size="9" text-anchor="middle">3-2-1 strategy · roadmap</text></g>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ROOM 1 · THE FOUNDATION ═══ -->
+<section id="room-1" class="py-16 px-6 scroll-mt-24">
+  <div class="max-w-3xl mx-auto">
+    <p class="reveal path-eyebrow text-signal mb-3">ROOM 1</p>
+    <h2 class="reveal font-display text-3xl font-medium text-ink mb-6">The Foundation</h2>
+    <p class="reveal d1 text-ink-soft leading-relaxed max-w-2xl mb-10">
+      Everything else in this tour depends on two boxes sitting in a closet: one that runs computers inside computers, and one that never forgets a byte.
     </p>
 
-    <div class="flex flex-wrap justify-center gap-3 fi fi-4">
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold text-primary">128 GB</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">ECC RAM</p>
+    <!-- Featured exhibit: Proxmox -->
+    <div class="reveal d1 mb-2">
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-2xl">🖥</span>
+        <h3 class="font-display text-xl font-medium text-ink">Proxmox VE</h3>
+        <span class="mono text-xs text-ink-soft">the hypervisor</span>
       </div>
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold text-primary">4+ TB</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">ZFS Storage</p>
-      </div>
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold" style="color:#b45309">4</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">VLAN Segments</p>
-      </div>
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold" style="color:#b45309">10+</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">VMs &amp; LXCs</p>
-      </div>
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold text-primary">Zero</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">Trust Model</p>
-      </div>
-      <div class="glass px-5 py-3 rounded-2xl text-center big-stat">
-        <p class="text-2xl font-extrabold" style="color:#059669">24/7</p>
-        <p class="text-xs text-text-light mt-0.5 font-mono">Uptime Target</p>
-      </div>
+      <p class="text-ink-soft leading-relaxed max-w-2xl mb-2">
+        This is the one machine that everything else technically runs "inside of." A single physical server — a 10-core Xeon with 128GB of ECC memory — is carved up into a dozen virtual machines and containers, each one thinking it has the whole computer to itself.
+      </p>
+      <p class="text-ink-soft leading-relaxed max-w-2xl">
+        ECC memory matters more here than on a normal desktop: a silent bit-flip in regular RAM can quietly corrupt every VM running on top of it, and ECC catches that in real time. The 20 available threads mean the firewall, storage, Windows Server, and a dozen Docker containers can all run at once without fighting each other for CPU time.
+      </p>
     </div>
 
-    <div class="flex flex-col sm:flex-row gap-3 justify-center fi fi-5">
-      <a href="#topology" class="px-8 py-4 rounded-full bg-primary text-white font-bold text-base hover:bg-secondary transition hover:-translate-y-0.5 shadow-lg shadow-primary/20">Explore the Stack ↓</a>
-      <a href="index.html" class="px-8 py-4 rounded-full border border-text-light/30 bg-white/60 hover:bg-white/90 transition text-base text-text-deep">← Portfolio</a>
-    </div>
-  </div>
-</section>
-<div class="sec-div"></div>
-
-
-<!-- ══════════════════════════════════════ TOPOLOGY ══════════════════════════════════════ -->
-<section id="topology" class="section-wrap py-28" style="background:#f8fafc">
-  <div class="container mx-auto px-6 max-w-5xl">
-
-    <div class="text-center mb-14 rv">
-      <span class="tbadge">Architecture Overview</span>
-      <h2 class="text-4xl md:text-5xl font-bold text-text-deep mt-4">How Everything Connects</h2>
-      <p class="text-text-light mt-3 max-w-xl mx-auto">Every request flows through this stack — from the public internet down to isolated VLANs and physical hosts.</p>
-    </div>
-
-    <div class="glass rounded-3xl p-8 md:p-12 rv">
-      <div class="flex flex-col items-center gap-2 font-mono text-sm select-none">
-
-        <div class="topo-node topo-inet w-56 md:w-72 font-semibold">🌐 Public Internet (WAN)</div>
-        <div class="text-text-light text-lg leading-none">│</div>
-        <div class="text-xs text-text-light font-mono -mt-1 mb-1">ISP Modem / Gateway</div>
-        <div class="text-text-light text-lg leading-none">│</div>
-
-        <div class="topo-node topo-fw w-64 md:w-80">
-          <div class="font-bold">🔥 OPNsense Firewall VM</div>
-          <div class="text-xs opacity-70 mt-0.5">Stateful Inspection · NAT · VLAN Routing</div>
-        </div>
-        <div class="text-text-light text-lg leading-none">│</div>
-
-        <div class="topo-node topo-sw w-64 md:w-80">
-          <div class="font-bold">🔀 TP-Link 16-Port Managed Switch</div>
-          <div class="text-xs opacity-70 mt-0.5">802.1Q VLAN Tagging · QoS</div>
-        </div>
-
-        <div class="w-full max-w-2xl mt-2">
-          <div class="flex justify-around mb-1">
-            <div class="h-4 border-l border-text-light/30"></div>
-            <div class="h-4 border-l border-text-light/30"></div>
-            <div class="h-4 border-l border-text-light/30"></div>
-            <div class="h-4 border-l border-text-light/30"></div>
-          </div>
-          <div class="grid grid-cols-4 gap-2 md:gap-3">
-            <div class="topo-node topo-v text-center" style="border-left:3px solid #1e40af">
-              <div class="font-bold text-primary">VLAN 10</div>
-              <div class="text-xs text-text-light mt-0.5">Admin</div>
-            </div>
-            <div class="topo-node topo-v text-center" style="border-left:3px solid #b45309">
-              <div class="font-bold" style="color:#b45309">VLAN 20</div>
-              <div class="text-xs text-text-light mt-0.5">Clients</div>
-            </div>
-            <div class="topo-node topo-v text-center" style="border-left:3px solid #059669">
-              <div class="font-bold" style="color:#059669">VLAN 30</div>
-              <div class="text-xs text-text-light mt-0.5">IoT</div>
-            </div>
-            <div class="topo-node topo-v text-center" style="border-left:3px solid #7c3aed">
-              <div class="font-bold" style="color:#7c3aed">VLAN 40</div>
-              <div class="text-xs text-text-light mt-0.5">VPN</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="text-text-light text-lg leading-none mt-1">│</div>
-
-        <div class="w-full max-w-2xl">
-          <div class="flex justify-around mb-1">
-            <div class="h-4 border-l border-text-light/30"></div>
-            <div class="h-4 border-l border-text-light/30"></div>
-            <div class="h-4 border-l border-text-light/30"></div>
-          </div>
-          <div class="grid grid-cols-3 gap-2 md:gap-3">
-            <div class="topo-node" style="background:rgba(30,64,175,0.06)">
-              <div class="font-bold text-primary text-xs">🖥 Proxmox VE</div>
-              <div class="text-xs text-text-light mt-0.5">Hypervisor Host</div>
-            </div>
-            <div class="topo-node" style="background:rgba(180,83,9,0.05)">
-              <div class="font-bold text-xs" style="color:#b45309">💾 TrueNAS</div>
-              <div class="text-xs text-text-light mt-0.5">ZFS Storage</div>
-            </div>
-            <div class="topo-node" style="background:rgba(5,150,105,0.05)">
-              <div class="font-bold text-xs" style="color:#059669">🐳 Docker LXC</div>
-              <div class="text-xs text-text-light mt-0.5">Self-Hosted Apps</div>
-            </div>
-          </div>
-        </div>
+    <!-- Supporting placards -->
+    <div class="placard reveal d2 pt-6 mt-6">
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-xl">💾</span>
+        <h4 class="font-display text-lg font-medium text-ink">TrueNAS Core</h4>
+        <span class="mono text-xs text-ink-soft">the memory</span>
       </div>
+      <p class="text-ink-soft text-sm leading-relaxed max-w-2xl">
+        A second box holds every VM snapshot and backup on a 4+TB ZFS pool. Standard RAID can silently hand back corrupted data with no warning — ZFS checksums every block on every read, so quiet corruption gets caught instead of copied into the next backup.
+      </p>
     </div>
 
-    <!-- 4 tier nav cards -->
-    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 rv">
-      <a href="#physical" class="glass rounded-2xl p-5 hover:shadow-md transition group" style="border-top:3px solid #1e40af">
-        <p class="text-xs font-mono text-primary font-bold uppercase tracking-wider mb-1">Tier 1</p>
-        <p class="font-bold text-text-deep text-sm group-hover:text-primary transition">Physical Infrastructure</p>
-        <p class="text-xs text-text-light mt-1">Proxmox · TrueNAS · Endpoints</p>
-      </a>
-      <a href="#networking" class="glass rounded-2xl p-5 hover:shadow-md transition group" style="border-top:3px solid #b45309">
-        <p class="text-xs font-mono font-bold uppercase tracking-wider mb-1" style="color:#b45309">Tier 2</p>
-        <p class="font-bold text-text-deep text-sm group-hover:text-primary transition">Network &amp; Security</p>
-        <p class="text-xs text-text-light mt-1">OPNsense · VLANs · WireGuard</p>
-      </a>
-      <a href="#virtualization" class="glass rounded-2xl p-5 hover:shadow-md transition group" style="border-top:3px solid #1e40af">
-        <p class="text-xs font-mono text-primary font-bold uppercase tracking-wider mb-1">Tier 3</p>
-        <p class="font-bold text-text-deep text-sm group-hover:text-primary transition">Virtualization</p>
-        <p class="text-xs text-text-light mt-1">Windows Server · Ubuntu · Docker</p>
-      </a>
-      <a href="#continuity" class="glass rounded-2xl p-5 hover:shadow-md transition group" style="border-top:3px solid #059669">
-        <p class="text-xs font-mono font-bold uppercase tracking-wider mb-1" style="color:#059669">Tier 4</p>
-        <p class="font-bold text-text-deep text-sm group-hover:text-primary transition">Resilience &amp; DR</p>
-        <p class="text-xs text-text-light mt-1">Snapshots · Replication · Roadmap</p>
-      </a>
+    <div class="placard reveal d3 pt-6 mt-6">
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-xl">🎮</span>
+        <h4 class="font-display text-lg font-medium text-ink">Client Nodes</h4>
+        <span class="mono text-xs text-ink-soft">the everyday hardware</span>
+      </div>
+      <p class="text-ink-soft text-sm leading-relaxed max-w-2xl">
+        A gaming PC and a PS5 live on the network too, but they're kept on their own segment with no path back to the hypervisor or storage — so if one ever got compromised, it would hit a wall before it reached anything that matters. They're also where I test new firewall rules before trusting them anywhere else.
+      </p>
     </div>
   </div>
 </section>
-<div class="sec-div"></div>
 
+<!-- ═══ ROOM 2 · FOLLOW A PACKET HOME ═══ -->
+<section id="room-2" class="py-16 px-6 bg-surface-2 scroll-mt-24">
+  <div class="max-w-3xl mx-auto">
+    <p class="reveal path-eyebrow text-signal mb-3">ROOM 2</p>
+    <h2 class="reveal font-display text-3xl font-medium text-ink mb-6">Follow a Packet Home</h2>
+    <p class="reveal d1 text-ink-soft leading-relaxed max-w-2xl mb-4">
+      Say a laptop on the WiFi tries to reach the file server. It hits the firewall first, gets inspected, then lands on a managed switch that tags every device into one of four segments. From there, the rule is simple: unless a segment is explicitly allowed to talk to another, it can't. A compromised smart bulb on the IoT segment physically cannot reach the NAS — not because of a setting somewhere, but because the packet gets dropped before it ever arrives.
+    </p>
+    <p class="reveal d2 text-ink-soft leading-relaxed max-w-2xl mb-10">
+      This is the same segmentation model used in enterprise and cloud networks — the homelab version just has fewer users and more consoles.
+    </p>
 
-<!-- ══════════════════════════════════════ PHYSICAL ══════════════════════════════════════ -->
-<section id="physical" class="section-wrap py-28" style="background:#f1f5fa">
-  <div class="container mx-auto px-6 max-w-5xl">
-
-    <div class="text-center mb-14 rv">
-      <span class="tbadge">Tier 1 · Physical Infrastructure</span>
-      <h2 class="text-4xl md:text-5xl font-bold text-text-deep mt-4">Compute &amp; Storage</h2>
-      <p class="text-text-light mt-3 max-w-xl mx-auto">The bare-metal foundation everything else runs on.</p>
+    <!-- VLAN status widget -->
+    <div class="reveal d2 grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-10 max-w-2xl">
+      <div class="vlan-pill bg-surface border border-line rounded-lg px-3.5 py-3 flex items-center gap-2.5">
+        <span class="vlan-pulse"><span class="ping" style="background:#0F6E5C"></span><span class="core" style="background:#0F6E5C"></span></span>
+        <div><p class="text-xs font-semibold text-ink">VLAN 10</p><p class="mono text-[.62rem] text-ink-soft">TRUSTED</p></div>
+      </div>
+      <div class="vlan-pill bg-surface border border-line rounded-lg px-3.5 py-3 flex items-center gap-2.5">
+        <span class="vlan-pulse"><span class="ping" style="background:#0F6E5C"></span><span class="core" style="background:#0F6E5C"></span></span>
+        <div><p class="text-xs font-semibold text-ink">VLAN 20</p><p class="mono text-[.62rem] text-ink-soft">OPEN</p></div>
+      </div>
+      <div class="vlan-pill bg-surface border border-line rounded-lg px-3.5 py-3 flex items-center gap-2.5">
+        <span class="vlan-pulse"><span class="ping" style="background:#B5730A"></span><span class="core" style="background:#B5730A"></span></span>
+        <div><p class="text-xs font-semibold text-ink">VLAN 30</p><p class="mono text-[.62rem] text-ink-soft">RESTRICTED</p></div>
+      </div>
+      <div class="vlan-pill bg-surface border border-line rounded-lg px-3.5 py-3 flex items-center gap-2.5">
+        <span class="vlan-pulse"><span class="ping" style="background:#0F6E5C"></span><span class="core" style="background:#0F6E5C"></span></span>
+        <div><p class="text-xs font-semibold text-ink">VLAN 40</p><p class="mono text-[.62rem] text-ink-soft">ENCRYPTED</p></div>
+      </div>
     </div>
 
-    <div class="grid md:grid-cols-3 gap-6">
-
-      <div class="glass rounded-2xl overflow-hidden rv d1">
-        <div class="px-6 pt-6 pb-5">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-3xl">🖥</span>
-            <span class="tbadge text-xs">Hypervisor</span>
-          </div>
-          <h3 class="text-lg font-bold text-text-deep">Proxmox VE</h3>
-          <div class="flex flex-wrap mt-2 mb-4">
-            <span class="spill">Xeon E5-2660 v2</span>
-            <span class="spill">10C / 20T</span>
-            <span class="spill">128 GB ECC</span>
-            <span class="spill">GTX 1050 Passthrough</span>
-          </div>
-          <ul class="space-y-2 text-sm text-text-light">
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>Runs all VMs &amp; containers on bare metal</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>Network isolation enforced at virtual bridge level</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>Snapshot &amp; backup management built in</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>GPU passed directly to VM for compute workloads</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-4">
-          <button class="expand-btn" data-target="phys-prox">Why this hardware? <span class="arr">▾</span></button>
-          <div id="phys-prox" class="expandable mt-3">
-            <div class="why text-sm text-text-light leading-relaxed">
-              <strong class="text-text-deep">ECC RAM is critical for a hypervisor.</strong> A single bit-flip in regular RAM can silently corrupt every VM on the system. ECC detects and corrects single-bit errors in real time — standard in every production server.<br/><br/>
-              The <strong class="text-text-deep">20-thread Xeon</strong> allows genuine parallelism: OPNsense, TrueNAS, Windows Server, and multiple Docker containers all run simultaneously without competing for CPU time.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl overflow-hidden rv d2">
-        <div class="px-6 pt-6 pb-5">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-3xl">💾</span>
-            <span class="tbadge text-xs" style="color:#b45309;background:rgba(180,83,9,0.07);border-color:rgba(180,83,9,0.2)">Storage</span>
-          </div>
-          <h3 class="text-lg font-bold text-text-deep">TrueNAS Core</h3>
-          <div class="flex flex-wrap mt-2 mb-4">
-            <span class="spill">4+ TB ZFS Pool</span>
-            <span class="spill">NFS Share</span>
-            <span class="spill">SMB Share</span>
-            <span class="spill">SMART Monitoring</span>
-          </div>
-          <ul class="space-y-2 text-sm text-text-light">
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold flex-shrink-0">→</span>Stores all VM snapshots &amp; backups</li>
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold flex-shrink-0">→</span>NFS for Proxmox; SMB for Windows VMs</li>
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold flex-shrink-0">→</span>ZFS checksums every block — detects corruption</li>
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold flex-shrink-0">→</span>Scheduled scrubs catch drive degradation early</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-4">
-          <button class="expand-btn" data-target="phys-nas">Why ZFS over RAID? <span class="arr">▾</span></button>
-          <div id="phys-nas" class="expandable mt-3">
-            <div class="why-gold text-sm text-text-light leading-relaxed">
-              Standard RAID can return <strong class="text-text-deep">silently corrupted data</strong> with no error — called "bit rot." ZFS checksums every block and verifies it on every read. In a backup system, data integrity isn't optional.<br/><br/>
-              <strong class="text-text-deep">NFS vs SMB:</strong> NFS is low-overhead for large sequential writes (VM backups). SMB is used for Windows clients — it's the native protocol with zero compatibility friction.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl overflow-hidden rv d3">
-        <div class="px-6 pt-6 pb-5">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-3xl">🎮</span>
-            <span class="tbadge text-xs">Endpoints</span>
-          </div>
-          <h3 class="text-lg font-bold text-text-deep">Client Nodes</h3>
-          <div class="flex flex-wrap mt-2 mb-4">
-            <span class="spill">Ryzen 7 7800X3D</span>
-            <span class="spill">RTX 3060 Ti</span>
-            <span class="spill">GTX 1060 (Plex)</span>
-            <span class="spill">PlayStation 5</span>
-          </div>
-          <ul class="space-y-2 text-sm text-text-light">
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>Isolated on VLAN 20 — can't reach admin layer</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>GTX 1060 does Plex GPU transcoding</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>All streaming routed through Surfshark VPN</li>
-            <li class="flex gap-2"><span class="text-primary font-bold flex-shrink-0">→</span>Used for VLAN &amp; firewall rule testing</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-4">
-          <button class="expand-btn" data-target="phys-end">Why isolate endpoints? <span class="arr">▾</span></button>
-          <div id="phys-end" class="expandable mt-3">
-            <div class="why text-sm text-text-light leading-relaxed">
-              Consumer devices run unverified firmware and connect to external networks constantly — high-risk. Placing them on VLAN 20 means even a <strong class="text-text-deep">fully compromised console cannot reach the hypervisor or storage</strong>. The firewall enforces this at the packet level.<br/><br/>
-              GPU transcoding in Plex drops CPU load from ~400% to under 10% per 4K stream. Without it, simultaneous streams would saturate the server.
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <!-- VLANs as a simple list -->
+    <div class="reveal d2 space-y-4 mb-12 max-w-2xl">
+      <p class="mono text-xs text-ink-soft mb-1">FOUR SEGMENTS, ONE RULE — DENY BY DEFAULT:</p>
+      <p class="text-sm text-ink leading-relaxed"><b>VLAN 10 · Admin</b> — Proxmox, TrueNAS, and firewall management. Reachable only over the WireGuard VPN or in person.</p>
+      <p class="text-sm text-ink leading-relaxed"><b>VLAN 20 · Clients</b> — gaming PC, PS5, streaming. Free internet access, no path into anything else.</p>
+      <p class="text-sm text-ink leading-relaxed"><b>VLAN 30 · IoT &amp; guests</b> — smart home devices. Outbound HTTPS only, and Pi-hole blocks tracking and known malware domains network-wide.</p>
+      <p class="text-sm text-ink leading-relaxed"><b>VLAN 40 · VPN</b> — remote laptop and phone, authenticated by public key rather than password. Even a stolen key can't pivot into the client or IoT segments.</p>
     </div>
 
-    <div class="mt-12 text-center rv">
-      <a href="#networking" class="nxt">Next: Network &amp; Security <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+    <p class="reveal d3 text-ink-soft leading-relaxed max-w-2xl mb-8">
+      Here's what that deny-by-default rule actually looks like once it's written down:
+    </p>
+
+    <div class="reveal d3 console-panel rounded-xl overflow-hidden max-w-2xl">
+      <div class="console-chrome flex items-center gap-2 px-4 py-2.5">
+        <span class="console-dot bg-[#ff5f56]"></span><span class="console-dot bg-[#ffbd2e]"></span><span class="console-dot bg-[#27c93f]"></span>
+        <span class="mono text-xs text-[#6B7580] ml-2">opnsense_fw_rules.txt</span>
+      </div>
+      <div class="p-5 term-line text-xs leading-relaxed text-[#C8D2CD] overflow-x-auto">
+<pre class="whitespace-pre"><span class="text-[#6B7580]"># default policy on every VLAN interface: DENY ALL</span>
+<span class="text-[#6B7580]"># everything below is an explicit exception</span>
+
+VLAN 10 (Admin)   → Any        : <span class="text-phosphor">ALLOW</span>
+VLAN 20 (Clients) → WAN        : <span class="text-phosphor">ALLOW</span>
+VLAN 20 (Clients) → VLAN 10/30/40 : <span class="text-[#f87171]">DENY</span>
+VLAN 30 (IoT)     → WAN :443   : <span class="text-phosphor">ALLOW</span>
+VLAN 30 (IoT)     → Any VLAN   : <span class="text-[#f87171]">DENY</span>
+VLAN 40 (VPN)     → VLAN 10    : <span class="text-phosphor">ALLOW</span>
+VLAN 40 (VPN)     → VLAN 20/30 : <span class="text-[#f87171]">DENY</span>
+
+<span class="text-[#6B7580]"># any DNS bypass attempt gets redirected here</span>
+Any VLAN → UDP/TCP 53 → REDIRECT → Pi-hole@10.0.10.5<span class="cursor-blink"></span></pre>
+      </div>
     </div>
   </div>
 </section>
-<div class="sec-div"></div>
 
+<!-- ═══ ROOM 3 · THE PRACTICE LAB & THE EVERYDAY ═══ -->
+<section id="room-3" class="py-16 px-6 scroll-mt-24">
+  <div class="max-w-3xl mx-auto">
+    <p class="reveal path-eyebrow text-signal mb-3">ROOM 3</p>
+    <h2 class="reveal font-display text-3xl font-medium text-ink mb-6">The Practice Lab &amp; the Everyday</h2>
+    <p class="reveal d1 text-ink-soft leading-relaxed max-w-2xl mb-8">
+      This room does two jobs. Half of it is a sandbox for practicing enterprise Windows administration with nothing real on the line. The other half quietly runs the actual services I use every day — including the site you're reading right now.
+    </p>
 
-<!-- ══════════════════════════════════════ NETWORKING ══════════════════════════════════════ -->
-<section id="networking" class="section-wrap py-28" style="background:#f8fafc">
-  <div class="container mx-auto px-6 max-w-5xl">
-
-    <div class="text-center mb-14 rv">
-      <span class="tbadge">Tier 2 · Network &amp; Security</span>
-      <h2 class="text-4xl md:text-5xl font-bold text-text-deep mt-4">Zero-Trust Perimeter</h2>
-      <p class="text-text-light mt-3 max-w-xl mx-auto">Every device lives in a segment. Every segment has a deny-by-default policy. Nothing communicates unless explicitly allowed.</p>
+    <div class="reveal d2 mb-10">
+      <p class="mono text-xs text-ink-soft mb-3">THE PRACTICE LAB — THREE VMS THAT MIRROR A REAL DOMAIN:</p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl mb-2"><b class="text-ink">Windows Server 2025</b> runs as a domain controller — Active Directory, Group Policy, DNS and DHCP for the domain. No study guide replaces doing OU design and GPO troubleshooting live.</p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl mb-2"><b class="text-ink">An Ubuntu Server VM</b> is where scripts and packages get tested before anything touches production — the same dev-to-prod pipeline real infrastructure teams use, just scaled down.</p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl"><b class="text-ink">A Windows 10 client</b> stays domain-joined so every GPO and firewall rule gets verified from an actual end user's point of view before I'd trust it anywhere else.</p>
     </div>
 
-    <div class="glass rounded-2xl p-7 mb-10 rv" style="border-left:5px solid #1e40af">
-      <div class="flex items-start gap-4">
+    <div class="reveal d3">
+      <p class="mono text-xs text-ink-soft mb-3">THE EVERYDAY — ONE ALPINE CONTAINER, TEN-PLUS SERVICES:</p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl mb-4">
+        All of it runs in Docker inside a single lightweight Alpine LXC — using less RAM than one Windows VM while running everything below. Portainer gives a GUI over the containers, config stays versioned in GitHub, and Uptime Kuma and Nagios keep an eye on all of it. The rest covers day-to-day use: a WordPress sandbox, Vikunja for tasks, Navidrome and Audiobookshelf for media, and The Lounge for IRC.
+      </p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl mb-8">
+        Running Docker inside an LXC stacks two isolation layers — a problem in one container can't touch the host, and it's the same pattern behind how Kubernetes runs pods on container-optimized nodes in the cloud.
+      </p>
+
+      <!-- Public hosting sub-story -->
+      <p class="mono text-xs text-ink-soft mb-3">GOING PUBLIC — HOW THIS SITE (AND MY LEDGER APP) ACTUALLY REACH THE INTERNET:</p>
+      <p class="text-sm text-ink-soft leading-relaxed max-w-2xl mb-6">
+        Two of these services are actually public: this portfolio, and a full-stack budgeting app I built myself — its own React-style frontend plus a real database, tracking my own finances and budget. Both live on my own domain and get there the same way. A push to GitHub triggers Coolify to build and deploy the container. NGINX handles the reverse proxy, routing each subdomain to the right container instead of exposing raw ports. Cloudflare sits in front of all of it — managing DNS, proxying traffic so my home IP is never exposed directly, and issuing and auto-renewing the SSL certificates that keep everything on HTTPS.
+      </p>
+
+      <!-- Hosting flow widget -->
+      <div class="console-panel rounded-xl overflow-hidden max-w-2xl mb-8">
+        <div class="console-chrome flex items-center gap-2 px-4 py-2.5">
+          <span class="console-dot bg-[#ff5f56]"></span><span class="console-dot bg-[#ffbd2e]"></span><span class="console-dot bg-[#27c93f]"></span>
+          <span class="mono text-xs text-[#6B7580] ml-2">request path — derekcyr.ca</span>
+        </div>
+        <div class="p-5 flex flex-wrap items-center gap-2">
+          <span class="hop">🌐 Visitor</span>
+          <span class="hop-arrow">→</span>
+          <span class="hop">☁️ Cloudflare <span class="hop-sub">DNS · SSL · proxy</span></span>
+          <span class="hop-arrow">→</span>
+          <span class="hop">🔀 NGINX <span class="hop-sub">reverse proxy</span></span>
+          <span class="hop-arrow">→</span>
+          <span class="hop">🐳 Container <span class="hop-sub">site or ledger app</span></span>
+        </div>
+      </div>
+
+      <!-- Service status widget -->
+      <div class="console-panel rounded-xl overflow-hidden max-w-2xl">
+        <div class="console-chrome flex items-center gap-2 px-4 py-2.5">
+          <span class="console-dot bg-[#ff5f56]"></span><span class="console-dot bg-[#ffbd2e]"></span><span class="console-dot bg-[#27c93f]"></span>
+          <span class="mono text-xs text-[#6B7580] ml-2">services — all running</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 p-5">
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Coolify</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Cloudflare</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">NGINX Proxy Mgr</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Portainer</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Uptime Kuma</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Nagios</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Portfolio Site</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Ledger App + DB</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">WordPress</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Vikunja</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Navidrome</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">Audiobookshelf</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">The Lounge</span></div>
+          <div class="flex items-center gap-2"><span class="svc-dot"></span><span class="mono text-[.72rem] text-[#C8D2CD]">GitHub sync</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ROOM 4 · WHAT HAPPENS WHEN SOMETHING BREAKS ═══ -->
+<section id="room-4" class="py-16 px-6 bg-surface-2 scroll-mt-24">
+  <div class="max-w-3xl mx-auto">
+    <p class="reveal path-eyebrow text-signal mb-3">ROOM 4</p>
+    <h2 class="reveal font-display text-3xl font-medium text-ink mb-6">What Happens When Something Breaks</h2>
+    <p class="reveal d1 text-ink-soft leading-relaxed max-w-2xl mb-10">
+      Every design choice in this homelab assumes something eventually will break — a drive, a bad update, a fat-fingered config change. The question that actually matters is how fast it recovers.
+    </p>
+
+    <div class="reveal d2 space-y-5 max-w-2xl mb-10">
+      <div class="flex gap-4">
+        <span class="mono text-xs text-signal pt-0.5">01</span>
+        <p class="text-sm text-ink-soft leading-relaxed"><b class="text-ink">Hourly</b> — Proxmox snapshots let any single VM roll back to any hour, without touching anything else.</p>
+      </div>
+      <div class="flex gap-4">
+        <span class="mono text-xs text-signal pt-0.5">02</span>
+        <p class="text-sm text-ink-soft leading-relaxed"><b class="text-ink">Daily</b> — everything replicates from Proxmox to TrueNAS over ZFS, so a full copy survives even if the hypervisor itself dies.</p>
+      </div>
+      <div class="flex gap-4">
+        <span class="mono text-xs text-signal pt-0.5">03</span>
+        <p class="text-sm text-ink-soft leading-relaxed"><b class="text-ink">Weekly</b> — Plex metadata gets its own snapshot. Rebuilding that from scratch takes hours; from backup, under five minutes.</p>
+      </div>
+    </div>
+
+    <!-- Backup health widget -->
+    <div class="health-widget reveal d2 bg-surface border border-line rounded-xl p-5 max-w-2xl mb-8">
+      <div class="space-y-3.5">
         <div>
-          <h3 class="text-lg font-bold text-text-deep mb-2">Why segment the network at all?</h3>
-          <p class="text-text-light text-sm leading-relaxed">In a flat network, every device can freely talk to every other device. A compromised IoT bulb could send traffic to the NAS. A guest device could reach the Proxmox management UI. <strong class="text-text-deep">VLANs create hard logical boundaries</strong> — combined with OPNsense firewall rules, even a fully compromised device in one VLAN hits a wall trying to reach another. This is the same model used in enterprise and cloud environments.</p>
+          <div class="flex justify-between mb-1.5"><span class="mono text-[.68rem] text-ink-soft">HOURLY SNAPSHOT</span><span class="mono text-[.68rem] text-signal">HEALTHY</span></div>
+          <div class="health-bar-track"><div class="health-bar-fill" data-fill></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between mb-1.5"><span class="mono text-[.68rem] text-ink-soft">DAILY ZFS REPLICATION</span><span class="mono text-[.68rem] text-signal">HEALTHY</span></div>
+          <div class="health-bar-track"><div class="health-bar-fill" data-fill></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between mb-1.5"><span class="mono text-[.68rem] text-ink-soft">WEEKLY METADATA SNAPSHOT</span><span class="mono text-[.68rem] text-signal">HEALTHY</span></div>
+          <div class="health-bar-track"><div class="health-bar-fill" data-fill></div></div>
         </div>
       </div>
+      <p class="facts mt-4 pt-4 border-t border-line">Target: <b>~5 min</b> to restore<span class="sep">·</span>Worst case: <b>1 hr</b> of data loss<span class="sep">·</span>ZFS pool: <b>ONLINE</b></p>
     </div>
 
-    <h3 class="text-xl font-bold text-text-deep mb-5 rv">VLAN Segments</h3>
-    <div class="grid md:grid-cols-2 gap-5 mb-12">
-
-      <div class="glass rounded-2xl overflow-hidden rv d1 v10">
-        <div class="px-6 py-5">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">VLAN 10</span>
-            <h4 class="font-bold text-text-deep">Administration</h4>
-          </div>
-          <p class="text-xs text-text-light font-mono mb-3">Proxmox · TrueNAS · OPNsense Management</p>
-          <ul class="space-y-1.5 text-sm text-text-light">
-            <li class="flex gap-2"><span class="text-primary font-bold">→</span>No inbound connections from any other VLAN</li>
-            <li class="flex gap-2"><span class="text-primary font-bold">→</span>Reachable only via WireGuard VPN remotely</li>
-            <li class="flex gap-2"><span class="text-primary font-bold">→</span>All management traffic stays local</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-3">
-          <button class="expand-btn" data-target="v10-why">Why restrict admin? <span class="arr">▾</span></button>
-          <div id="v10-why" class="expandable mt-3">
-            <div class="why text-sm text-text-light leading-relaxed">Proxmox and TrueNAS both expose web UIs. If reachable from untrusted devices, a single compromised endpoint could give an attacker <strong class="text-text-deep">full control over every VM and all stored data</strong>. The admin VLAN means you need physical access or a verified VPN connection to manage infrastructure.</div>
-          </div>
-        </div>
+    <div class="reveal d3 console-panel rounded-xl overflow-hidden max-w-2xl mb-14">
+      <div class="console-chrome flex items-center gap-2 px-4 py-2.5">
+        <span class="console-dot bg-[#ff5f56]"></span><span class="console-dot bg-[#ffbd2e]"></span><span class="console-dot bg-[#27c93f]"></span>
+        <span class="mono text-xs text-[#6B7580] ml-2">backup_status.sh</span>
       </div>
-
-      <div class="glass rounded-2xl overflow-hidden rv d2 v20">
-        <div class="px-6 py-5">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="font-mono text-xs font-bold px-2 py-0.5 rounded" style="color:#b45309;background:rgba(180,83,9,0.1)">VLAN 20</span>
-            <h4 class="font-bold text-text-deep">Gaming &amp; Clients</h4>
-          </div>
-          <p class="text-xs text-text-light font-mono mb-3">Gaming PCs · PlayStation 5 · Streaming</p>
-          <ul class="space-y-1.5 text-sm text-text-light">
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>Internet access allowed</li>
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>No access to VLAN 10, 30, or 40</li>
-            <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>QoS bandwidth priority for low-latency gaming</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-3">
-          <button class="expand-btn" data-target="v20-why">Why isolate consoles? <span class="arr">▾</span></button>
-          <div id="v20-why" class="expandable mt-3">
-            <div class="why-gold text-sm text-text-light leading-relaxed">Gaming hardware runs unverified firmware and is constantly connected to external servers. Even if a console were exploited, it <strong class="text-text-deep">physically cannot reach the hypervisor or NAS</strong>. The firewall drops those packets before they ever arrive.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl overflow-hidden rv d3 v30">
-        <div class="px-6 py-5">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="font-mono text-xs font-bold px-2 py-0.5 rounded" style="color:#059669;background:rgba(5,150,105,0.1)">VLAN 30</span>
-            <h4 class="font-bold text-text-deep">IoT &amp; General</h4>
-          </div>
-          <p class="text-xs text-text-light font-mono mb-3">Smart Home Devices · Untrusted Guests</p>
-          <ul class="space-y-1.5 text-sm text-text-light">
-            <li class="flex gap-2"><span style="color:#059669" class="font-bold">→</span>Outbound HTTPS only (port 443)</li>
-            <li class="flex gap-2"><span style="color:#059669" class="font-bold">→</span>Zero inter-VLAN routing — most restricted</li>
-            <li class="flex gap-2"><span style="color:#059669" class="font-bold">→</span>Pi-hole blocks IoT tracking &amp; botnet domains</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-3">
-          <button class="expand-btn" data-target="v30-why">Why is IoT so restricted? <span class="arr">▾</span></button>
-          <div id="v30-why" class="expandable mt-3">
-            <div class="why text-sm text-text-light leading-relaxed" style="background:rgba(5,150,105,0.04);border-color:rgba(5,150,105,0.18)">IoT devices are notorious security risks — outdated firmware, no patch cycle, weak auth. They can reach their cloud servers. They <strong class="text-text-deep">cannot talk to anything else on the network</strong>. Industry best practice.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl overflow-hidden rv d4 v40">
-        <div class="px-6 py-5">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="font-mono text-xs font-bold px-2 py-0.5 rounded" style="color:#7c3aed;background:rgba(124,58,237,0.1)">VLAN 40</span>
-            <h4 class="font-bold text-text-deep">VPN Tunnel</h4>
-          </div>
-          <p class="text-xs text-text-light font-mono mb-3">Remote Laptop · Mobile Devices (WireGuard)</p>
-          <ul class="space-y-1.5 text-sm text-text-light">
-            <li class="flex gap-2"><span style="color:#7c3aed" class="font-bold">→</span>Auth by public-key cryptography — no passwords</li>
-            <li class="flex gap-2"><span style="color:#7c3aed" class="font-bold">→</span>VLAN 40 → VLAN 10 allowed; 20/30 denied</li>
-            <li class="flex gap-2"><span style="color:#7c3aed" class="font-bold">→</span>Encrypted in transit — safe on public WiFi</li>
-          </ul>
-        </div>
-        <div class="px-6 pb-5 border-t border-bg-surface pt-3">
-          <button class="expand-btn" data-target="v40-why">Why a VPN VLAN? <span class="arr">▾</span></button>
-          <div id="v40-why" class="expandable mt-3">
-            <div class="why text-sm text-text-light leading-relaxed" style="background:rgba(124,58,237,0.04);border-color:rgba(124,58,237,0.18)">VPN connections land in VLAN 40, not directly in VLAN 10. Even with a <strong class="text-text-deep">stolen VPN credential</strong>, firewall rules still restrict access. A compromised key can't pivot to client or IoT segments.</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <h3 class="text-xl font-bold text-text-deep mb-5 rv">Security Services</h3>
-    <div class="grid md:grid-cols-3 gap-5 mb-12">
-
-      <div class="glass rounded-2xl p-6 rv d1" style="border-top:3px solid #f59e0b">
-        <h4 class="font-bold text-text-deep mb-1">🔥 OPNsense Firewall</h4>
-        <p class="text-xs font-mono text-text-light mb-3">VM on Proxmox · FreeBSD-based</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Stateful packet inspection on all traffic</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Default-deny on every VLAN interface</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>NAT, port forwarding, QoS traffic shaping</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Transparent DNS redirect to Pi-hole</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="fw-why">Why a VM firewall? <span class="arr">▾</span></button>
-        <div id="fw-why" class="expandable mt-3">
-          <div class="why text-sm text-text-light leading-relaxed">Running OPNsense as a VM means its config is snapshotted — a broken rule rolls back in seconds. It provides enterprise features (IDS/IPS, traffic inspection, cert management) that no consumer router offers.</div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl p-6 rv d2" style="border-top:3px solid #7c3aed">
-        <h4 class="font-bold text-text-deep mb-1">🔐 WireGuard VPN</h4>
-        <p class="text-xs font-mono text-text-light mb-3">LXC Container · UDP 51820</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Public-key auth — no passwords to brute force</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Split tunneling: only internal traffic routed</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Unique key per device — individual revocation</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>~4,000 lines vs OpenVPN's ~100,000+</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="wg-why">Why WireGuard? <span class="arr">▾</span></button>
-        <div id="wg-why" class="expandable mt-3">
-          <div class="why text-sm text-text-light leading-relaxed" style="background:rgba(124,58,237,0.04);border-color:rgba(124,58,237,0.18)">WireGuard's minimal codebase is far easier to audit for vulnerabilities. Modern cryptography (ChaCha20, Curve25519) and UDP transport deliver 3–5× faster connections than OpenVPN with lower latency — important for remote management.</div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl p-6 rv d3" style="border-top:3px solid #b45309">
-        <h4 class="font-bold text-text-deep mb-1">🕳  Pi-hole DNS Filter</h4>
-        <p class="text-xs font-mono text-text-light mb-3">LXC Container · Network-wide DNS</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Blocks ads, trackers, malware C2 domains</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Applied to every device via DHCP</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>OPNsense intercepts DNS bypass attempts</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Query log gives full network visibility</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="ph-why">Why DNS-level? <span class="arr">▾</span></button>
-        <div id="ph-why" class="expandable mt-3">
-          <div class="why-gold text-sm text-text-light leading-relaxed">Malware must resolve a domain before it can connect. Blocking at DNS prevents the connection before it's ever established — works on every device including consoles and IoT. OPNsense redirects any device trying to bypass Pi-hole back to it.</div>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="rv">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-xl font-bold text-text-deep">Firewall Rule Logic</h3>
-        <button class="expand-btn" data-target="fw-terminal">View rule summary <span class="arr">▾</span></button>
-      </div>
-      <div id="fw-terminal" class="expandable">
-        <div class="term">
-          <div class="term-hdr">
-            <span class="td bg-red-400"></span>
-            <span class="td bg-yellow-400"></span>
-            <span class="td bg-green-400"></span>
-            <span class="text-xs text-blue-300 ml-3 opacity-70">opnsense_fw_rules.txt</span>
-          </div>
-          <div class="term-body"><span class="tc"># Default policy on ALL VLAN interfaces: DENY ALL</span>
-<span class="tc"># Rules below are explicit ALLOW exceptions only</span>
-
-<span class="tw">VLAN 10 (Admin)</span>   → Any            : <span class="tp">ALLOW</span>   <span class="tc"># Admin can reach everything</span>
-<span class="tw">VLAN 20 (Clients)</span>  → WAN            : <span class="tp">ALLOW</span>   <span class="tc"># Clients get internet</span>
-<span class="tw">VLAN 20 (Clients)</span>  → VLAN 10/30/40  : <span class="tm">DENY</span>    <span class="tc"># Clients cannot touch infrastructure</span>
-<span class="tw">VLAN 30 (IoT)</span>      → WAN port 443   : <span class="tp">ALLOW</span>   <span class="tc"># IoT: HTTPS only</span>
-<span class="tw">VLAN 30 (IoT)</span>      → Any VLAN       : <span class="tm">DENY</span>    <span class="tc"># IoT fully isolated</span>
-<span class="tw">VLAN 40 (VPN)</span>      → VLAN 10        : <span class="tp">ALLOW</span>   <span class="tc"># VPN peers manage infrastructure</span>
-<span class="tw">VLAN 40 (VPN)</span>      → VLAN 20/30     : <span class="tm">DENY</span>    <span class="tc"># VPN scope limited to admin only</span>
-
-<span class="tc"># Transparent DNS enforcement (prevents Pi-hole bypass)</span>
-<span class="tw">Any VLAN</span>           → UDP/TCP 53     : <span class="tk">REDIRECT</span> → Pi-hole @ 10.0.10.5</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="mt-12 text-center rv">
-      <a href="#virtualization" class="nxt">Next: Virtualization &amp; Workloads <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
-    </div>
-  </div>
-</section>
-<div class="sec-div"></div>
-
-
-<!-- ══════════════════════════════════════ VIRTUALIZATION ══════════════════════════════════════ -->
-<section id="virtualization" class="section-wrap py-28" style="background:#f1f5fa">
-  <div class="container mx-auto px-6 max-w-5xl">
-
-    <div class="text-center mb-14 rv">
-      <span class="tbadge">Tier 3 · Virtualization</span>
-      <h2 class="text-4xl md:text-5xl font-bold text-text-deep mt-4">Workloads &amp; Applications</h2>
-      <p class="text-text-light mt-3 max-w-xl mx-auto">Each environment is isolated — a problem in one VM or container can't affect anything else on the system.</p>
-    </div>
-
-    <div class="flex items-center gap-3 mb-5 rv">
-      <h3 class="text-xl font-bold text-text-deep">A. Enterprise Testing VMs</h3>
-      <span class="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold border border-primary/20">Full Virtual Machines</span>
-    </div>
-
-    <div class="grid md:grid-cols-3 gap-5 mb-14">
-
-      <div class="glass rounded-2xl p-6 rv d1">
-        <h4 class="font-bold text-text-deep mt-3 mb-1">🏢 Windows Server 2025</h4>
-        <p class="text-xs font-mono text-primary uppercase tracking-wider mb-3">Domain Controller</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Active Directory domain management</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Group Policy Object deployment &amp; testing</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>DNS &amp; DHCP roles for the domain</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="vm-ws">Why run AD at home? <span class="arr">▾</span></button>
-        <div id="vm-ws" class="expandable mt-3">
-          <div class="why text-sm text-text-light leading-relaxed">Active Directory is the backbone of virtually every enterprise Windows environment. No study guide replaces hands-on AD — user/group management, OU design, and GPO troubleshooting have to be practised live. This directly mirrors day-one work in a corporate sysadmin role.</div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl p-6 rv d2">
-        <h4 class="font-bold text-text-deep mt-3 mb-1">🐧 Ubuntu Server VM</h4>
-        <p class="text-xs font-mono uppercase tracking-wider mb-3" style="color:#b45309">Linux Sandbox</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>Bash scripting &amp; automation practice</li>
-          <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>Package testing before production deploy</li>
-          <li class="flex gap-2"><span style="color:#b45309" class="font-bold">→</span>Domain-joined for Linux-AD integration tests</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="vm-ub">Why a test VM? <span class="arr">▾</span></button>
-        <div id="vm-ub" class="expandable mt-3">
-          <div class="why-gold text-sm text-text-light leading-relaxed">Changes tested here can't break production services. If something goes wrong, the VM rolls back to a snapshot in seconds. This mirrors the "dev → staging → prod" pipeline used in real infrastructure teams.</div>
-        </div>
-      </div>
-
-      <div class="glass rounded-2xl p-6 rv d3">
-        <h4 class="font-bold text-text-deep mt-3 mb-1">💻 Windows 10 Client VM</h4>
-        <p class="text-xs font-mono text-primary uppercase tracking-wider mb-3">Client Simulation</p>
-        <ul class="space-y-1.5 text-sm text-text-light">
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Domain-joined end-user workstation</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Verifies GPO application from user perspective</li>
-          <li class="flex gap-2"><span class="text-primary font-bold">→</span>Tests firewall rules from a real client</li>
-        </ul>
-        <button class="expand-btn mt-4" data-target="vm-w10">Why a client VM? <span class="arr">▾</span></button>
-        <div id="vm-w10" class="expandable mt-3">
-          <div class="why text-sm text-text-light leading-relaxed">A domain controller without a client to verify against is untested infrastructure. This VM simulates a real end-user workstation — confirming GPOs apply correctly and network rules behave as expected from the user's point of view.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-3 mb-5 rv">
-      <h3 class="text-xl font-bold text-text-deep">B. Self-Hosted Services</h3>
-      <span class="text-xs font-mono px-2 py-0.5 rounded font-semibold border" style="background:rgba(180,83,9,0.08);color:#b45309;border-color:rgba(180,83,9,0.2)">Docker on Alpine LXC</span>
-    </div>
-
-    <div class="glass rounded-2xl p-7 rv">
-      <p class="text-sm text-text-light mb-5 max-w-2xl">All services run in Docker containers inside a single lightweight Alpine LXC. Alpine's ~5 MB base image means this environment uses less RAM than one Windows VM while running 10+ isolated services.</p>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="rounded-xl p-4" style="background:rgba(30,64,175,0.05);border:1px solid rgba(30,64,175,0.12)">
-          <p class="text-xs font-mono text-primary font-bold uppercase tracking-wider mb-2">Management</p>
-          <ul class="text-sm text-text-light space-y-1.5">
-            <li><strong class="text-text-mid">Portainer</strong> — Docker GUI</li>
-            <li><strong class="text-text-mid">Heimdall</strong> — Service dashboard</li>
-            <li><strong class="text-text-mid">Uptime Kuma</strong> — Uptime monitoring</li>
-          </ul>
-        </div>
-        <div class="rounded-xl p-4" style="background:rgba(180,83,9,0.05);border:1px solid rgba(180,83,9,0.12)">
-          <p class="text-xs font-mono font-bold uppercase tracking-wider mb-2" style="color:#b45309">Web &amp; Proxy</p>
-          <ul class="text-sm text-text-light space-y-1.5">
-            <li><strong class="text-text-mid">NGINX Proxy Manager</strong> — SSL + routing</li>
-            <li><strong class="text-text-mid">WordPress</strong> — CMS dev environment</li>
-          </ul>
-        </div>
-        <div class="rounded-xl p-4" style="background:rgba(30,64,175,0.05);border:1px solid rgba(30,64,175,0.12)">
-          <p class="text-xs font-mono text-primary font-bold uppercase tracking-wider mb-2">Productivity</p>
-          <ul class="text-sm text-text-light space-y-1.5">
-            <li><strong class="text-text-mid">Vikunja</strong> — Task management</li>
-            <li><strong class="text-text-mid">The Lounge</strong> — Persistent IRC</li>
-          </ul>
-        </div>
-        <div class="rounded-xl p-4" style="background:rgba(180,83,9,0.05);border:1px solid rgba(180,83,9,0.12)">
-          <p class="text-xs font-mono font-bold uppercase tracking-wider mb-2" style="color:#b45309">Media</p>
-          <ul class="text-sm text-text-light space-y-1.5">
-            <li><strong class="text-text-mid">Navidrome</strong> — Music streaming</li>
-            <li><strong class="text-text-mid">Audiobookshelf</strong> — Audiobooks</li>
-          </ul>
-        </div>
-      </div>
-      <button class="expand-btn mt-5" data-target="docker-why">Why Docker inside an LXC? <span class="arr">▾</span></button>
-      <div id="docker-why" class="expandable mt-3">
-        <div class="why text-sm text-text-light leading-relaxed max-w-2xl">Running Docker inside an LXC gives two isolation layers. The LXC has its own filesystem and network namespace — no service affects the hypervisor host. Docker adds per-service isolation with defined resource limits. This mirrors how Kubernetes pods run on container-optimised nodes in cloud environments.</div>
-      </div>
-    </div>
-
-    <div class="mt-12 text-center rv">
-      <a href="#continuity" class="nxt">Next: Business Continuity <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
-    </div>
-  </div>
-</section>
-<div class="sec-div"></div>
-
-
-<!-- ══════════════════════════════════════ CONTINUITY ══════════════════════════════════════ -->
-<section id="continuity" class="section-wrap py-28" style="background:#f8fafc">
-  <div class="container mx-auto px-6 max-w-5xl">
-
-    <div class="text-center mb-14 rv">
-      <span class="tbadge">Tier 4 · Resilience &amp; Roadmap</span>
-      <h2 class="text-4xl md:text-5xl font-bold text-text-deep mt-4">Business Continuity</h2>
-      <p class="text-text-light mt-3 max-w-xl mx-auto">Every design decision considers recoverability. Good backup habits here translate directly to managing production infrastructure.</p>
-    </div>
-
-    <div class="grid lg:grid-cols-2 gap-10 items-start">
-
-      <div class="space-y-6">
-
-        <div class="glass rounded-2xl p-7 rv lft" style="border-left:4px solid #1e40af">
-          <h3 class="text-lg font-bold text-text-deep mb-4">Backup Strategy — 3-2-1 Rule</h3>
-          <div class="space-y-4">
-            <div class="flex gap-4 items-start">
-              <div class="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">1</div>
-              <div class="text-sm">
-                <strong class="text-text-deep">Hourly — Proxmox snapshots</strong>
-                <p class="text-text-light mt-0.5">Roll back any VM to any hour without touching others</p>
-              </div>
-            </div>
-            <div class="flex gap-4 items-start">
-              <div class="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">2</div>
-              <div class="text-sm">
-                <strong class="text-text-deep">Daily — Proxmox → TrueNAS ZFS replication</strong>
-                <p class="text-text-light mt-0.5">Full VM backups on a separate device — survives hypervisor failure</p>
-              </div>
-            </div>
-            <div class="flex gap-4 items-start">
-              <div class="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">3</div>
-              <div class="text-sm">
-                <strong class="text-text-deep">Weekly — Plex metadata snapshots</strong>
-                <p class="text-text-light mt-0.5">Rebuilding from scratch takes hours; from backup, under 5 minutes</p>
-              </div>
-            </div>
-          </div>
-          <div class="mt-5 pt-4 border-t border-bg-surface flex gap-8 text-sm">
-            <div><p class="text-xs text-text-light font-mono">RTO Target</p><p class="font-bold text-text-deep">~5 min</p></div>
-            <div><p class="text-xs text-text-light font-mono">RPO (worst case)</p><p class="font-bold text-text-deep">1 hour</p></div>
-            <div><p class="text-xs text-text-light font-mono">ZFS state</p><p class="font-bold" style="color:#059669">ONLINE</p></div>
-          </div>
-        </div>
-
-        <div class="glass rounded-2xl p-7 rv lft" style="border-left:4px solid #b45309">
-          <h3 class="text-lg font-bold text-text-deep mb-4">Planned Enhancements</h3>
-          <div class="space-y-4">
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-mono bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded font-semibold border border-yellow-200">In Progress</span>
-                <strong class="text-text-deep text-sm">NGINX Reverse Proxy + SSL</strong>
-              </div>
-              <p class="text-text-light text-sm">Subdomain-based routing with auto-renewing HTTPS — replacing port-based access across all services.</p>
-            </div>
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold border border-blue-200">Planned</span>
-                <strong class="text-text-deep text-sm">Ansible Infrastructure as Code</strong>
-              </div>
-              <p class="text-text-light text-sm">Convert all VM and LXC config into playbooks. Rebuild the entire homelab from scratch with a single command.</p>
-            </div>
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold border border-blue-200">Planned</span>
-                <strong class="text-text-deep text-sm">Wazuh SIEM + Suricata IDS</strong>
-              </div>
-              <p class="text-text-light text-sm">Centralized logging and intrusion detection — full audit trail and real-time threat alerting.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap gap-2 rv lft">
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">Proxmox VE</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">TrueNAS / ZFS</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">OPNsense</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">Docker / LXC</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">WireGuard VPN</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(30,64,175,0.07);color:#1e40af;border-color:rgba(30,64,175,0.18)">Pi-hole / DNS</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(180,83,9,0.07);color:#b45309;border-color:rgba(180,83,9,0.18)">VLAN Segmentation</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(180,83,9,0.07);color:#b45309;border-color:rgba(180,83,9,0.18)">Active Directory</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(180,83,9,0.07);color:#b45309;border-color:rgba(180,83,9,0.18)">Firewall Policy</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(107,114,128,0.08);color:#374151;border-color:rgba(107,114,128,0.18)">Ansible (planned)</span>
-          <span class="stag px-3 py-1.5 rounded-md text-xs font-bold border" style="background:rgba(107,114,128,0.08);color:#374151;border-color:rgba(107,114,128,0.18)">Suricata IDS (planned)</span>
-        </div>
-      </div>
-
-      <div class="space-y-6">
-        <div class="rv rgt">
-          <div class="term">
-            <div class="term-hdr">
-              <span class="td bg-red-400"></span>
-              <span class="td bg-yellow-400"></span>
-              <span class="td bg-green-400"></span>
-              <span class="text-xs text-blue-300 ml-3 opacity-70">backup_status.sh</span>
-            </div>
-            <div class="term-body"><span class="tc"># Check Proxmox → TrueNAS replication health</span>
-<span class="tp">$</span> ssh admin@truenas-core
-
-<span class="th">truenas:~ #</span> zpool status rpool
+      <div class="p-5 term-line text-xs leading-relaxed text-[#C8D2CD] overflow-x-auto">
+<pre class="whitespace-pre"><span class="text-[#6B7580]">$ ssh admin@truenas-core</span>
+truenas:~# zpool status rpool
   pool: rpool
-  state: <span class="tp">ONLINE</span>
+  state: <span class="text-phosphor">ONLINE</span>
   scan: scrub repaired 0B, 0 errors
 
-<span class="th">truenas:~ #</span> replication list
-<span class="tk">TASK</span>                 <span class="tk">STATE</span>       <span class="tk">LAST RUN</span>
-VM-LXC-Hourly        <span class="tp">SUCCESS</span>     07:00 today
-Proxmox-Daily        <span class="tp">SUCCESS</span>     05:00 today
-Plex-Weekly          <span class="tp">SUCCESS</span>     Sun 03:00
+truenas:~# replication list
+TASK           STATE      LAST RUN
+VM-LXC-Hourly  <span class="text-phosphor">SUCCESS</span>    07:00 today
+Proxmox-Daily  <span class="text-phosphor">SUCCESS</span>    05:00 today
+Plex-Weekly    <span class="text-phosphor">SUCCESS</span>    Sun 03:00
 
-<span class="tc"># RTO: ~5 min restore from TrueNAS snapshot</span>
-<span class="tc"># RPO: 1 hr worst-case data loss</span>
-<span class="tp">$</span> <span class="tc"># All systems nominal.</span></div>
-          </div>
-        </div>
-
-        <div class="glass rounded-2xl p-6 rv rgt d1">
-          <h4 class="font-bold text-text-deep mb-4">Why This Matters to an Employer</h4>
-          <ul class="space-y-3">
-            <li class="flex gap-3 text-sm">
-              <span class="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-              <p class="text-text-light"><strong class="text-text-deep">Real hands-on experience</strong> — built on real hardware, not simulated in a browser or cloud sandbox</p>
-            </li>
-            <li class="flex gap-3 text-sm">
-              <span class="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-              <p class="text-text-light"><strong class="text-text-deep">Security-first mindset</strong> — every decision considers attack surface, segmentation, and least-privilege</p>
-            </li>
-            <li class="flex gap-3 text-sm">
-              <span class="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-              <p class="text-text-light"><strong class="text-text-deep">Enterprise tooling</strong> — Proxmox, OPNsense, ZFS, Active Directory, Docker, WireGuard are all production-used</p>
-            </li>
-            <li class="flex gap-3 text-sm">
-              <span class="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-              <p class="text-text-light"><strong class="text-text-deep">Growth mindset</strong> — Ansible, IDS, and reverse proxy roadmap shows deliberate, ongoing improvement</p>
-            </li>
-          </ul>
-        </div>
+$ all systems nominal.<span class="cursor-blink"></span></pre>
       </div>
-
     </div>
 
-    <div class="mt-14 text-center rv">
-      <a href="#topology" class="inline-flex items-center gap-2 text-primary font-bold hover:text-secondary transition text-sm group">
-        <svg class="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
-        Back to Top
-      </a>
+    <!-- Roadmap -->
+    <p class="reveal path-eyebrow text-signal mb-5">WHAT'S NEXT</p>
+    <div class="reveal d1 space-y-4 max-w-2xl mb-14">
+      <div class="roadmap-item pl-4">
+        <p class="text-sm font-medium text-ink">Ansible infrastructure as code <span class="mono text-xs text-ink-soft font-normal">— planned</span></p>
+        <p class="text-xs text-ink-soft mt-0.5">Every VM and LXC as a playbook — rebuild the whole thing from a single command.</p>
+      </div>
+      <div class="roadmap-item pl-4">
+        <p class="text-sm font-medium text-ink">Wazuh SIEM + Suricata IDS <span class="mono text-xs text-ink-soft font-normal">— planned</span></p>
+        <p class="text-xs text-ink-soft mt-0.5">Centralized logging and intrusion detection, with a full audit trail.</p>
+      </div>
+    </div>
+
+    <!-- Closing note -->
+    <div class="reveal d2 bg-ink rounded-2xl p-8 md:p-10 max-w-2xl">
+      <p class="eyebrow text-[.7rem] text-phosphor mb-4">END OF TOUR</p>
+      <p class="text-sm text-[#C8D2CD] leading-relaxed">
+        None of this was simulated in a browser sandbox — it's real hardware I've broken and fixed more times than I'd like to admit. Every VLAN, snapshot, and firewall rule reflects the same instincts I bring to work: assume something will fail, isolate the blast radius, and document it well enough that someone else could pick it up without me.
+      </p>
     </div>
   </div>
 </section>
 
-<!-- Footer -->
-<footer class="py-12 border-t border-primary/10 relative z-10" style="background:#e8eef5">
-  <div class="container mx-auto px-6 text-center">
-    <h2 class="text-2xl font-bold text-text-deep mb-1">Derek Cyr</h2>
-    <p class="text-text-light mb-6 text-sm font-mono">Homelab · Virtualization · Network Security</p>
-    <div class="flex justify-center gap-4 mb-8">
-      <a href="index.html" class="p-3 rounded-full bg-white hover:bg-primary/10 text-text-light hover:text-primary transition hover:scale-110 shadow-sm" aria-label="Portfolio">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+<!-- ═══ FOOTER ═══ -->
+<footer class="py-12 px-6 border-t border-line mt-4">
+  <div class="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+    <p class="wordmark text-base text-ink-soft">Derek <span class="text-signal">Cyr</span></p>
+    <div class="flex gap-3">
+      <a href="index.html" class="w-9 h-9 rounded-full border border-line flex items-center justify-center text-ink-soft hover:text-signal hover:border-signal transition" aria-label="Portfolio">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
       </a>
-      <a href="https://www.linkedin.com/in/derek-cyr-904a63296/" class="p-3 rounded-full bg-white hover:bg-primary/10 text-text-light hover:text-primary transition hover:scale-110 shadow-sm" aria-label="LinkedIn">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+      <a href="https://www.linkedin.com/in/derekcyr4" target="_blank" rel="noopener noreferrer" class="w-9 h-9 rounded-full border border-line flex items-center justify-center text-ink-soft hover:text-signal hover:border-signal transition" aria-label="LinkedIn">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
       </a>
-      <a href="mailto:derekcyr4@gmail.com" class="p-3 rounded-full bg-white hover:bg-primary/10 text-text-light hover:text-primary transition hover:scale-110 shadow-sm" aria-label="Email">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <a href="mailto:derekcyr4@gmail.com" class="w-9 h-9 rounded-full border border-line flex items-center justify-center text-ink-soft hover:text-signal hover:border-signal transition" aria-label="Email">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
       </a>
     </div>
-<p class="text-text-light/50 text-xs">
-  &copy; <span id="year"></span> Derek Cyr · Self built, self hosted.
-</p>
-
-<script>
-  document.getElementById("year").textContent = new Date().getFullYear();
-</script>
   </div>
+  <p class="text-center text-ink-soft/60 text-xs mt-8 eyebrow">© <span id="year"></span> DEREK CYR · SELF BUILT, SELF HOSTED</p>
 </footer>
 
 <script>
-  // Scroll reveal
-  const obs = new IntersectionObserver((entries, o) => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); o.unobserve(e.target); } });
-  }, { threshold: 0.08 });
-  document.querySelectorAll('.rv').forEach(el => obs.observe(el));
+  document.getElementById("year").textContent = new Date().getFullYear();
 
-  // Expand toggles
-  document.querySelectorAll('.expand-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = document.getElementById(btn.dataset.target);
-      const isOpen = target.classList.contains('open');
-      target.classList.toggle('open', !isOpen);
-      btn.classList.toggle('open', !isOpen);
+  const topbar = document.getElementById("topbar");
+  window.addEventListener("scroll", () => topbar.classList.toggle("scrolled", window.scrollY > 20));
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+  document.querySelectorAll(".topo-node, .topo-node-m").forEach(node => {
+    node.addEventListener("click", () => {
+      const el = document.getElementById(node.dataset.target);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
-  // Mobile menu
-  const mobBtn  = document.getElementById('mob-btn');
-  const mobMenu = document.getElementById('mob-menu');
-  const icoO    = document.getElementById('ico-o');
-  const icoC    = document.getElementById('ico-c');
-  mobBtn.addEventListener('click', () => {
-    mobMenu.classList.toggle('open');
-    icoO.classList.toggle('hidden');
-    icoC.classList.toggle('hidden');
+  // Animated counters
+  const counterIo = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      const target = parseInt(el.dataset.target, 10);
+      const dur = 900;
+      const start = performance.now();
+      function step(now) {
+        const p = Math.min((now - start) / dur, 1);
+        el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+      counterIo.unobserve(el);
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll(".counter").forEach(c => counterIo.observe(c));
+
+  // Backup health bars fill on scroll into view
+  const barIo = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      entry.target.querySelectorAll("[data-fill]").forEach((bar, i) => {
+        setTimeout(() => bar.classList.add("filled"), i * 150);
+      });
+      barIo.unobserve(entry.target);
+    });
+  }, { threshold: 0.4 });
+  document.querySelectorAll(".health-widget").forEach(w => barIo.observe(w));
+
+  const btn = document.getElementById("mobile-menu-btn");
+  const menu = document.getElementById("mobile-menu");
+  const iOpen = document.getElementById("icon-open");
+  const iClose = document.getElementById("icon-close");
+  btn.addEventListener("click", () => {
+    menu.classList.toggle("open");
+    iOpen.classList.toggle("hidden");
+    iClose.classList.toggle("hidden");
   });
-  document.querySelectorAll('.mob-l').forEach(l => l.addEventListener('click', () => {
-    mobMenu.classList.remove('open');
-    icoO.classList.remove('hidden');
-    icoC.classList.add('hidden');
+  document.querySelectorAll(".mobile-link").forEach(l => l.addEventListener("click", () => {
+    menu.classList.remove("open"); iOpen.classList.remove("hidden"); iClose.classList.add("hidden");
   }));
 </script>
 </body>
