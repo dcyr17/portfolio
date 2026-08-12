@@ -70,8 +70,7 @@
   #mobile-menu.open { max-height:400px; }
 
   /* Experience list — editorial, not cards */
-  .role-row { border-top:1px solid #E3E3DC; transition: background-color .2s; }
-  .role-row:hover { background: #F7F7F3; }
+  .role-row { border-top:1px solid #E3E3DC; }
   .role-row:last-child { border-bottom:1px solid #E3E3DC; }
   .stack-line { font-family:"JetBrains Mono",monospace; font-size:.72rem; color:#8A93A0; }
 
@@ -115,8 +114,8 @@
 </header>
 
 <!-- ═══ LETTERHEAD / HERO ═══ -->
-<section id="home" class="pt-28 sm:pt-32 md:pt-36 pb-12 sm:pb-16 px-6">
-  <div class="max-w-3xl mx-auto">
+<section id="home" class="min-h-screen flex flex-col justify-center pt-24 pb-16 px-6 relative">
+  <div class="max-w-3xl mx-auto w-full">
     <div class="reveal in flex items-center gap-2 eyebrow text-xs text-signal mb-5">
       <span class="status-dot"><span class="ping"></span><span class="core"></span></span>
       OPEN TO IAM &amp; CLOUD INFRASTRUCTURE ROLES · REMOTE / HYBRID
@@ -142,10 +141,15 @@
       <a href="homelab.html" class="btn-line text-sm font-medium">Explore the Homelab</a>
     </div>
   </div>
+
+  <a href="#about" class="reveal in d4 absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-ink-soft hover:text-signal transition-colors" aria-label="Scroll to About">
+    <span class="eyebrow text-[.65rem]">SCROLL</span>
+    <svg class="w-3.5 h-3.5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+  </a>
 </section>
 
 <!-- ═══ ABOUT ═══ -->
-<section id="about" class="py-12 sm:py-16 px-6">
+<section id="about" class="py-10 sm:py-14 px-6 scroll-mt-24">
   <div class="max-w-3xl mx-auto">
     <p class="reveal path-eyebrow text-signal mb-4">~/about</p>
     <div class="reveal d1 space-y-4 text-ink-soft leading-relaxed max-w-2xl">
@@ -167,7 +171,7 @@
 </section>
 
 <!-- ═══ EXPERIENCE ═══ -->
-<section id="experience" class="py-12 sm:py-16 px-6">
+<section id="experience" class="py-10 sm:py-14 px-6 scroll-mt-24" style="background:linear-gradient(180deg, #FAFAF7 0px, #F1F1EA 90px)">
   <div class="max-w-3xl mx-auto">
     <p class="reveal path-eyebrow text-signal mb-6">~/experience</p>
 
@@ -229,7 +233,7 @@
 </section>
 
 <!-- ═══ CERTIFICATIONS ═══ -->
-<section id="certifications" class="py-12 sm:py-16 px-6">
+<section id="certifications" class="py-10 sm:py-14 px-6 scroll-mt-24" style="background:linear-gradient(180deg, #F1F1EA 0px, #FAFAF7 90px)">
   <div class="max-w-3xl mx-auto">
     <p class="reveal path-eyebrow text-signal mb-6">~/certifications</p>
     <div class="reveal d1 max-w-2xl">
@@ -264,7 +268,7 @@
 </section>
 
 <!-- ═══ FOOTER ═══ -->
-<footer class="py-12 px-6 border-t border-line mt-8">
+<footer class="py-12 px-6 border-t border-line">
   <div class="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
     <p class="wordmark text-base text-ink-soft">Derek <span class="text-signal">Cyr</span></p>
     <div class="flex gap-3">
